@@ -1,0 +1,208 @@
+---
+title: "Quantium Technical Test Responses"
+author: "Rory Denham"
+date: "22/02/2021"
+output: 
+  pdf_document:
+    toc: true
+    toc_depth: 2
+    number_sections: true
+    
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE)
+
+
+if (!require("pacman")) install.packages("pacman")
+pacman::p_load(tidyverse, magrittr)
+
+library(tidyverse)
+library(magrittr)
+library(skimr)
+library(DataExplorer)
+```
+
+## Background
+
+The dataset provided is a fully de-identified set of hospital admissions data for episodes with diabetes related diagnoses. Each row represents a single encounter (inpatient episode) between a patient and one of 130 hospitals. For each encounter, multiple administratively collected variables are provided including the history of the patient’s previous admissions, the diagnosis for the given admission, the results of a number of tests performed during admission, the medicine prescriptions for the patient during admission, whether they are readmitted to the hospital and some other features described in the tables below.
+
+It won’t be possible to provide the perfect answer to all of these questions. What we’re looking to see is how you design your solution to the problem and how you prioritise the analysis you end up doing. The time we estimate this task to take is up to 6 hours. For each question we pose, provide a quick overview of your approach and key findings.
+
+##`Q1.`	Describe the dataset and note any points of interest or concern
+
+### Data Import
+
+```{r}
+#The true column names and values differ slightly from the values listed within the provided data dictionary 
+
+#eg. The "change" variable corresponds with "Change of medications" in the data dictionary (this may be worth checking with the data custodian) to confirm the correct variable was provided.
+
+#"?" values were specified as NA values
+
+#encounter_id and patient_id specified as character values. Character data type was chosen rather than integer because Medical Record Numbers (MRNs) can contain leading zeros which can incorrectly group different patients. This assumes these identifiers are derived from australian hospitals should be checked).
+
+
+
+diabetic_raw <- read_csv("diabetic_data.csv",
+                         col_types = cols("encounter_id" = col_character(),
+                                          "patient_nbr" = col_character(),
+                                          "race" = col_factor(levels = c("Caucasian", "Asian", "AfricanAmerican", "Hispanic", "Other"), 
+                                                              ordered = FALSE
+                                                              ),
+                                          "gender" = col_factor(),
+                                          "age" = col_factor(levels = c("[0-10)", "[10-20)", "[20-30)", "[30-40)", "[40-50)", "[50-60)", "[60-70)", "[70-80)", "[80-90)", "[90-100)"),
+                                                             ordered = TRUE),
+                                          "weight" = col_factor(levels = c("[0-25)", "[25-50)", "[50-75)", "[75-100)", "[100-125)", "[125-150)", "[150-175)", "[175-200)", ">200"), 
+                                                                ordered = TRUE),
+                                          "admission_type_id" = col_factor(ordered = FALSE),
+                                          "discharge_disposition_id" = col_factor(ordered = FALSE),
+                                          "admission_source_id" = col_factor(ordered = FALSE),
+                                          "time_in_hospital" = col_integer(),
+                                          "payer_code" = col_factor(ordered = FALSE),
+                                          "medical_specialty" = col_factor(ordered = FALSE),
+                                          "num_lab_procedures" = col_integer(),
+                                          "num_procedures" = col_integer(),
+                                          "num_medications" = col_integer(),
+                                          "number_outpatient" = col_integer(),
+                                          "number_emergency" = col_integer(),
+                                          "number_inpatient" = col_integer(),
+                                          "diag_1" = col_character(), 
+                                          "diag_2" = col_character(), 
+                                          "diag_3" = col_character(),
+                                          "number_diagnoses" = col_integer(),
+                                          "max_glu_serum" = col_factor(levels = c("None", ">300", "Norm", ">200"), ordered = FALSE),
+                                          "A1Cresult" = col_factor(levels = c("None", ">7", ">8", "Norm"), ordered = FALSE), 
+                                          "metformin" = col_factor(levels = c("No", "Down", "Steady", "Up"), ordered = TRUE),
+                                          "repaglinide" = col_factor(levels = c("No", "Down", "Steady", "Up"), ordered = TRUE),
+                                          "nateglinide" = col_factor(levels = c("No", "Down", "Steady", "Up"), ordered = TRUE),
+                                          "chlorpropamide" = col_factor(levels = c("No", "Down", "Steady", "Up"), ordered = TRUE),
+                                          "glimepiride" = col_factor(levels = c("No", "Down", "Steady", "Up"), ordered = TRUE),
+                                          "acetohexamide" = col_factor(levels = c("No", "Down", "Steady", "Up"), ordered = TRUE),
+                                          "glipizide" = col_factor(levels = c("No", "Down", "Steady", "Up"), ordered = TRUE),
+                                          "glyburide" = col_factor(levels = c("No", "Down", "Steady", "Up"), ordered = TRUE),
+                                          "tolbutamide" = col_factor(levels = c("No", "Down", "Steady", "Up"), ordered = TRUE), 
+                                          "pioglitazone" = col_factor(levels = c("No", "Down", "Steady", "Up"), ordered = TRUE),
+                                          "rosiglitazone" = col_factor(levels = c("No", "Down", "Steady", "Up"), ordered = TRUE),
+                                          "acarbose" = col_factor(levels = c("No", "Down", "Steady", "Up"), ordered = TRUE),
+                                          "miglitol" = col_factor(levels = c("No", "Down", "Steady", "Up"), ordered = TRUE),
+                                          "troglitazone" = col_factor(levels = c("No", "Down", "Steady", "Up"), ordered = TRUE),
+                                          "tolazamide" = col_factor(levels = c("No", "Down", "Steady", "Up"), ordered = TRUE), 
+                                          "examide" = col_factor(levels = c("No", "Down", "Steady", "Up"), ordered = TRUE),
+                                          "citoglipton" = col_factor(levels = c("No", "Down", "Steady", "Up"), ordered = TRUE),
+                                          "insulin" = col_factor(levels = c("No", "Down", "Steady", "Up"), ordered = TRUE),
+                                          "glyburide-metformin" = col_factor(levels = c("No", "Down", "Steady", "Up"), ordered = TRUE),
+                                          "glipizide-metformin" = col_factor(levels = c("No", "Down", "Steady", "Up"), ordered = TRUE),
+                                          "glimepiride-pioglitazone" = col_factor(levels = c("No", "Down", "Steady", "Up"), ordered = TRUE),
+                                          "metformin-rosiglitazone" = col_factor(levels = c("No", "Down", "Steady", "Up"), ordered = TRUE),
+                                          "metformin-pioglitazone" = col_factor(levels = c("No", "Down", "Steady", "Up"), ordered = TRUE),
+                                          "change" = col_factor(levels = c("Ch", "No"), ordered = FALSE),
+                                          "diabetesMed" =  col_factor(ordered = FALSE),
+                                          "readmitted" = col_factor(levels = c("NO", ">30", "<30"), ordered = FALSE)
+                                          ), 
+                         na = c("?", "Unknown/Invalid")
+                         )
+```
+
+
+```{r}
+skim(diabetic_raw)
+```
+
+A large proportion of the numeric variables such as weight, age, and blood glucose concentration have been factored. This means we will only be able to obtain a broad  estimate of the relevant statistics for patients within this cohort. For example, although we can determine differences between the age groups `[40-49]` and `[50-59]` respectively, however, we cannot investigate differences within groups such as `55 year olds` compared with `56 year olds`. Additionally, statistically significant differences may change if higher granularity in the variables becomes available for this cohort of patients.
+
+The majority of the variables do not contain NULL or missing values. However, variables `payer_code` (0.604%), `medical_specialty` (0.509%), and espically `weight` (0.031%) exhibit very low completion rates.
+
+```{r}
+DataExplorer::plot_bar(diabetic_raw)
+```
+
+
+```{r echo=FALSE}
+DataExplorer::plot_histogram(diabetic_raw)
+```
+
+
+```{r}
+# skim(diabetic_raw) 
+diabetic_raw %>% skim_with(factor = sfl(top_counts = NULL))
+```
+
+Looking at the frequencies of patients within each categorical variable subgroup, there are no obvious anomalies.
+
+Within the continuous variables the only variable which stands out is `number of diagnoses`. There are a very small number of encounters with greater than 8 total diagnoses for a given encounter. This may be a limitation of the Electronic Medical Record system used for data entry.
+
+By quickly inspecting the above graphs our patient demographic appears to be adults (no pedatric hospitals), predominately caucasian, with slightly more females. A large proportion of the patients are elderly and most patients were prescribed diabetes medications.
+
+
+## `Q2.` What’s the average number of days spent in hospital by admission type? 
+
+```{r echo=FALSE}
+Mean_LOS <- diabetic_raw %>% 
+  group_by(admission_type_id) %>% 
+  summarise(`Number of Observations` = n(),
+            `Mean Length of Stay` = mean(time_in_hospital)) %>% 
+  arrange(desc(`Mean Length of Stay`))
+
+Mean_LOS
+```
+
+`Admission type 7` has the longest mean length of stay at 4.86 days (to 2 dp). Althought there are a very small number of observations for this group.
+
+## `Q3.` Given a patient stays in hospital at least 3 days, how much longer do they generally stay?
+
+
+Mean additional time spent in hospital (all patients):", `r round(mean(diabetic_raw$time_in_hospital-3), 2)`
+
+```{r echo=FALSE}
+Mean_LOS %>% mutate(`Mean Additional Length of Stay` = `Mean Length of Stay`-3)
+```
+
+Overall, patients stay approximately 1.4 additional days after the 3 day period. Following from the previous question, this additional time in hospital is far less for admission types 4 and 8. 
+
+## `Q4.` Is there a significant different in time spent in hospital for patients over 60 compared to all other patients?
+
+```{r Simple T test}
+LOS_all_patients <- diabetic_raw$time_in_hospital
+LOS_over_60yo <- diabetic_raw$time_in_hospital[diabetic_raw$age > "[50-60)"]
+
+t.test(LOS_over_60yo, LOS_all_patients)
+```
+
+```{r}
+
+```
+
+
+##	`Q5.`	People have very different sets of medicines provided during an episode of care for diabetes. Describe / group the different types of admissions in terms of the types of medicines patients are taking. 
+
+```{r}
+
+```
+
+##	`Q6.`	All else being equal, is HBA1c testing a useful measure for identifying whether a patient is likely to be readmitted? Explain your approach and the key information which drives your decision.
+
+```{r}
+
+```
+
+It is important to distinguish between a measure which is predictive and a measure which is 
+
+##	`Q7.` What other analysis would you do if you had more time on any of the previous questions? 
+
+```{r}
+
+```
+
+##	`Q8.`	8.	Are there any other interesting findings from the data you would like to share which don’t fall into the above questions?
+
+```{r}
+
+```
+
+##	`Q9.`	9.	What other information would you request or try to collect to make a better decision?
+
+```{r}
+
+```
+
